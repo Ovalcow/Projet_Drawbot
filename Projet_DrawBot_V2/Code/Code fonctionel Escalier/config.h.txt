@@ -1,0 +1,71 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <Arduino.h> // Pour PI (si jamais nécessaire, mais pas ici)
+
+// --- Nom du Périphérique Bluetooth ---
+#define BLUETOOTH_DEVICE_NAME "Drawbot_TimeCtrl"
+
+// --- Définitions des Broches Moteurs (Basées sur vos dernières informations) ---
+// Assurez-vous que ces broches correspondent EXACTEMENT à votre câblage.
+// Moteurs Enable
+#define EN_G_PIN   4  // Enable Moteur Gauche (Left)
+#define EN_D_PIN   23 // Enable Moteur Droit (Right)
+
+// Commande Moteur Gauche (Left)
+#define IN_1_G_PIN 17 
+#define IN_2_G_PIN 16 
+
+// Commande Moteur Droit (Right)
+#define IN_1_D_PIN 19 
+#define IN_2_D_PIN 18 
+
+// --- Paramètres PWM Moteurs ---
+#define PWM_FREQ 5000       // Fréquence PWM (Hz)
+#define PWM_RESOLUTION 8    // Résolution PWM (8 bits = 0-255)
+#define PWM_MAX 255         // Valeur PWM maximale
+
+// --- Puissances PWM de Base (A AJUSTER PAR ESSAIS) ---
+// Ce sont les valeurs que vous allez modifier pour que le robot aille à la bonne vitesse
+// et tourne correctement. Commencez avec des valeurs basses (ex: 100-150) et augmentez si besoin.
+#define BASE_PWM_STRAIGHT 190 // Puissance pour avancer/reculer en ligne droite
+#define BASE_PWM_TURN     200 // Puissance pour tourner sur place
+
+// --- Facteurs de Correction Moteurs (A AJUSTER PAR ESSAIS) ---
+// Si un moteur va plus vite que l'autre pour la même commande PWM,
+// réduisez légèrement son facteur (ex: 0.95 s'il va trop vite).
+// Laissez à 1.0 si les moteurs semblent équilibrés.
+#define LEFT_MOTOR_CORRECTION_FACTOR 1.0
+#define RIGHT_MOTOR_CORRECTION_FACTOR 0.94
+
+// --- Durées des Mouvements pour la Séquence Escalier (A AJUSTER PAR ESSAIS) ---
+// Ce sont les durées en millisecondes (ms) pour chaque étape.
+// Vous devrez les trouver expérimentalement pour obtenir les bonnes distances/angles.
+#define DURATION_FWD_20CM   550 // Exemple: durée pour avancer de 20cm (à ajuster)
+#define DURATION_TURN_90DEG 1450  // Exemple: durée pour tourner de 90 degrés (à ajuster)
+#define DURATION_FWD_10CM   0  // Exemple: durée pour avancer de 10cm (à ajuster)
+#define DURATION_FWD_40CM   600 // Exemple: durée pour avancer de 40cm (à ajuster)
+// --- Paramètres pour Virage en Arc ---
+// Ratio de la vitesse de la roue intérieure par rapport à la roue extérieure lors d'un virage en arc.
+// Exemple: 0.5 signifie que la roue intérieure va à 50% de la vitesse de la roue extérieure.
+// 0.0 = pivote autour de la roue intérieure.
+// Proche de 1.0 = virage très large.
+#define INNER_WHEEL_SPEED_RATIO_ARC_TURN 0.45 // À AJUSTER PAR ESSAIS (entre 0.0 et < 1.0)
+
+// --- Canaux PWM ESP32 (Ne pas modifier sauf si vous savez ce que vous faites) ---
+#define PWM_CHANNEL_L_IN1 0
+#define PWM_CHANNEL_L_IN2 1
+#define PWM_CHANNEL_R_IN1 2
+#define PWM_CHANNEL_R_IN2 3
+
+// --- Définitions pour la clarté du code ---
+#define LEFT_MOTOR 0
+#define RIGHT_MOTOR 1
+#define FORWARD 1
+#define BACKWARD -1
+#define STOP 0
+
+#define TURN_LEFT -1
+#define TURN_RIGHT 1
+
+#endif // CONFIG_H

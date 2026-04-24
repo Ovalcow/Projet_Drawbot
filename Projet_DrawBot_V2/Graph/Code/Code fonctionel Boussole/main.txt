@@ -1,0 +1,365 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_LIS3MDL.h>
+#include <Adafruit_Sensor.h>
+#include <BluetoothSerial.h>
+#include "config.h" // Utilise le même config.h que la version précédente
+
+// Variables Globales
+Adafruit_LIS3MDL lis3mdl;
+BluetoothSerial SerialBT;
+float mag_offset_x = 0.0f;
+float mag_offset_y = 0.0f;
+float mag_offset_z = 0.0f;
+volatile bool sequence_requested = false;
+volatile bool sequence_running = false;
+
+// Déclarations (Prototypes)
+void setupLIS3MDL();
+void setupMotors();
+void setupBluetooth();
+void setMotorSpeed(int motor_idx, int speed_pwm, bool dir_forward);
+void stopMotors();
+void turnRobot(bool clockwise, int speed_pwm);
+void calibrateMagnetometer();
+float calculateTrueNorthHeading();
+void orientNorth(int speed_pwm);
+void turnRobotTimed(bool clockwise, int speed_pwm, unsigned long duration_ms); // NOUVEAU PROTOTYPE
+void drawTrianglePoint(); // NOUVEAU PROTOTYPE
+void moveForwardTimed(int speed_pwm, unsigned long duration_ms);
+void executeSequence();
+void handleBluetoothCommands();
+
+// Fonctions d'Initialisation
+void setupLIS3MDL() { /* ... Idem version précédente ... */ 
+    Serial.print("Initialisation LIS3MDL... ");
+    if (!lis3mdl.begin_I2C(LIS3MDL_I2C_ADDRESS, &Wire)) {
+        Serial.println("Erreur: LIS3MDL non détecté!"); SerialBT.println("Erreur LIS3MDL!"); while (1) delay(10);
+    } Serial.println("LIS3MDL OK.");
+}
+void setupMotors() { /* ... Idem version précédente ... */ 
+    Serial.print("Configuration Moteurs... ");
+    pinMode(EN_D, OUTPUT); pinMode(IN_1_D, OUTPUT); pinMode(IN_2_D, OUTPUT);
+    pinMode(EN_G, OUTPUT); pinMode(IN_1_G, OUTPUT); pinMode(IN_2_G, OUTPUT);
+    digitalWrite(EN_D, HIGH); digitalWrite(EN_G, HIGH);
+    ledcSetup(PWM_CHANNEL_D1, PWM_FREQUENCY, PWM_RESOLUTION); ledcAttachPin(IN_1_D, PWM_CHANNEL_D1);
+    ledcSetup(PWM_CHANNEL_D2, PWM_FREQUENCY, PWM_RESOLUTION); ledcAttachPin(IN_2_D, PWM_CHANNEL_D2);
+    ledcSetup(PWM_CHANNEL_G1, PWM_FREQUENCY, PWM_RESOLUTION); ledcAttachPin(IN_1_G, PWM_CHANNEL_G1);
+    ledcSetup(PWM_CHANNEL_G2, PWM_FREQUENCY, PWM_RESOLUTION); ledcAttachPin(IN_2_G, PWM_CHANNEL_G2);
+    Serial.println("Moteurs OK.");
+}
+void setupBluetooth() { /* ... Idem version précédente ... */ 
+    Serial.print("Initialisation Bluetooth... ");
+    if (!SerialBT.begin(BLUETOOTH_DEVICE_NAME)) { Serial.println("Erreur BT!"); }
+    else { Serial.print("BT OK: "); Serial.println(BLUETOOTH_DEVICE_NAME); SerialBT.println("Envoyez 'S' pour Calib+Nord."); }
+}
+
+// Fonctions Moteur
+void setMotorSpeed(int motor_idx, int speed_pwm, bool dir_forward) { /* ... Idem version précédente ... */ 
+    speed_pwm = constrain(speed_pwm, 0, 255);
+    if (motor_idx == 0) {
+        if (dir_forward) { ledcWrite(PWM_CHANNEL_D1, speed_pwm); ledcWrite(PWM_CHANNEL_D2, 0); }
+        else { ledcWrite(PWM_CHANNEL_D1, 0); ledcWrite(PWM_CHANNEL_D2, speed_pwm); }
+    } else if (motor_idx == 1) {
+        if (dir_forward) { ledcWrite(PWM_CHANNEL_G1, speed_pwm); ledcWrite(PWM_CHANNEL_G2, 0); }
+        else { ledcWrite(PWM_CHANNEL_G1, 0); ledcWrite(PWM_CHANNEL_G2, speed_pwm); }
+    }
+}
+void stopMotors() { /* ... Idem version précédente ... */ 
+    setMotorSpeed(0, 0, true); setMotorSpeed(1, 0, true);
+    Serial.println(">>> MOTEURS ARRETES <<<");
+}
+void turnRobot(bool clockwise, int speed_pwm) { /* ... Idem version précédente ... */ 
+    if (clockwise) { setMotorSpeed(0, speed_pwm, false); setMotorSpeed(1, speed_pwm, true); }
+    else { setMotorSpeed(0, speed_pwm, true); setMotorSpeed(1, speed_pwm, false); }
+}
+
+// Fonctions Magnétomètre
+void calibrateMagnetometer() { /* ... Idem version précédente ... */ 
+    Serial.println("--- ETAPE 1: DEBUT CALIBRATION ---");
+    SerialBT.println("Etape 1: Calibration...");
+    pinMode(LEDU1, OUTPUT); digitalWrite(LEDU1, HIGH);
+    int16_t min_x = 32767, max_x = -32768, min_y = 32767, max_y = -32768, min_z = 32767, max_z = -32768;
+    unsigned long start_time = millis();
+    turnRobot(false, CALIBRATION_ROTATE_SPEED_PWM);
+    while (millis() - start_time < CALIBRATION_DURATION_MS) {
+        lis3mdl.read();
+        min_x = min(min_x, lis3mdl.x); max_x = max(max_x, lis3mdl.x);
+        min_y = min(min_y, lis3mdl.y); max_y = max(max_y, lis3mdl.y);
+        min_z = min(min_z, lis3mdl.z); max_z = max(max_z, lis3mdl.z);
+        delay(20);
+    }
+    stopMotors();
+    mag_offset_x = (float)(min_x + max_x) / 2.0f; mag_offset_y = (float)(min_y + max_y) / 2.0f; mag_offset_z = (float)(min_z + max_z) / 2.0f;
+    Serial.println("--- ETAPE 1: FIN CALIBRATION ---"); SerialBT.println("Calibration terminee.");
+    digitalWrite(LEDU1, LOW);
+}
+float calculateTrueNorthHeading() {
+    lis3mdl.read(); // Lire les données brutes du capteur
+
+    // Appliquer les offsets de calibration "hard-iron"
+    float corrected_x = (float)lis3mdl.x - mag_offset_x;
+    float corrected_y = (float)lis3mdl.y - mag_offset_y;
+
+    // On garde atan2(corrected_x, corrected_y) de la version précédente
+    // qui donnait le Sud au lieu du Nord.
+    float heading_rad = atan2(corrected_x, corrected_y); 
+    float heading_deg = heading_rad * 180.0f / PI;
+
+    // --- CORRECTION : AJOUT DE 180 DEGRES ---
+    // Si le résultat précédent était Sud (180°) quand on voulait Nord (0°),
+    // ajouter 180° va corriger cela.
+    // Ex: Si le calcul donne 180° (Sud), 180 + 180 = 360 => 0° (Nord)
+    // Ex: Si le calcul donne 0° (ce qui était physiquement Nord pour cette formule), 0 + 180 = 180° (Sud)
+    // NON, si le calcul donne 180° pour Nord, il faut que heading_deg devienne 0.
+    // Donc, si la formule actuelle `atan2(corrected_x, corrected_y)` fait que lorsque
+    // le robot POINTE PHYSIQUEMENT NORD, la valeur calculée est 180 (Sud),
+    // alors pour obtenir 0, on ajoute 180.
+    // heading_deg += 180.0f; // << APPLICATION DE LA CORRECTION DE 180 DEGRES
+
+    // Réflexion: Si `atan2(cx, cy)` donne 180° quand on est au Nord physiquement.
+    // Alors `result_actuel = 180`. On veut `result_final = 0`.
+    // Donc `result_final = result_actuel + 180`. `180 + 180 = 360 -> 0`. OK.
+    // Si on était à l'Est (physiquement), la formule `atan2(cx,cy)` donnerait 270.
+    // `270 + 180 = 450 -> 90`. OK.
+    // Cette logique d'ajouter 180° semble correcte si la formule actuelle est décalée de 180°.
+    heading_deg += 180.0f;
+    // ------------------------------------------
+
+    // Appliquer la déclinaison magnétique pour obtenir le Nord géographique
+    heading_deg += MAGNETIC_DECLINATION_DEG;
+
+    // Normaliser l'angle entre 0 et 360 degrés
+    while (heading_deg < 0.0f) heading_deg += 360.0f;
+    while (heading_deg >= 360.0f) heading_deg -= 360.0f; // Peut être > 360 après l'ajout de 180
+    
+    return heading_deg;
+}
+
+void turnRobotTimed(bool clockwise, int speed_pwm, unsigned long duration_ms) {
+    Serial.print("Tourne (temps): "); Serial.print(duration_ms); 
+    Serial.print("ms, direction: "); Serial.println(clockwise ? "Droite (CW)" : "Gauche (CCW)");
+
+    turnRobot(clockwise, speed_pwm); // Démarre la rotation continue
+    delay(duration_ms);              // Attend la durée
+    stopMotors();                    // Arrête la rotation
+}
+
+// =============================================================================
+// --- NOUVELLE FONCTION orientNorth (Rotation Continue) ---
+// =============================================================================
+void orientNorth(int speed_pwm) {
+    Serial.println("--- ETAPE 2: DEBUT ORIENTATION NORD (CONTINUE) ---");
+    SerialBT.println("Etape 2: Orientation Nord...");
+    pinMode(LEDU1, OUTPUT); digitalWrite(LEDU1, HIGH);
+
+    float target_angle = 0.0f;
+    unsigned long timeout = millis() + 20000; // 20s max
+
+    // 1. Lire le cap initial pour décider du sens
+    float current_heading = calculateTrueNorthHeading();
+    Serial.print("Cap initial: "); Serial.println(current_heading);
+
+    // Vérifier si on est déjà au Nord
+    if ((current_heading >= (360.0f - HEADING_ACCURACY_DEG)) || (current_heading <= HEADING_ACCURACY_DEG)) {
+        Serial.println(">>> Déjà orienté Nord ! <<<");
+        stopMotors();
+        digitalWrite(LEDU1, LOW);
+        return; // Sortir si c'est déjà bon
+    }
+
+    // 2. Décider du sens de rotation le plus court
+    bool turn_clockwise;
+    // Si le cap est entre (0+marge) et 180, on tourne à GAUCHE (CCW)
+    if (current_heading > HEADING_ACCURACY_DEG && current_heading < 180.0f) {
+        turn_clockwise = false;
+        Serial.println("Décision: Tourner GAUCHE (CCW) vers Nord.");
+    }
+    // Sinon (entre 180 et 360-marge), on tourne à DROITE (CW)
+    else {
+        turn_clockwise = true;
+        Serial.println("Décision: Tourner DROITE (CW) vers Nord.");
+    }
+
+    // 3. Commencer à tourner en continu
+    turnRobot(turn_clockwise, speed_pwm);
+
+    // 4. Boucler jusqu'à atteindre la cible
+    while (millis() < timeout) {
+        current_heading = calculateTrueNorthHeading();
+        Serial.print("Cap: "); Serial.println(current_heading);
+        SerialBT.print("Cap:"); SerialBT.println(current_heading);
+
+        // Vérifier si on est dans la fenêtre Nord
+        bool is_north = (current_heading >= (360.0f - HEADING_ACCURACY_DEG)) ||
+                        (current_heading <= HEADING_ACCURACY_DEG);
+
+        if (is_north) {
+            Serial.println(">>> Cible Nord atteinte ! ARRET. <<<");
+            break; // Sortir de la boucle
+        }
+        delay(40); // Lire le cap ~25 fois par seconde
+    }
+
+    // 5. Arrêter
+    stopMotors();
+    if (millis() >= timeout) { Serial.println(">>> TIMEOUT orientation! <<<"); }
+    Serial.print("--- ETAPE 2: FIN. Cap final: "); Serial.println(calculateTrueNorthHeading());
+    digitalWrite(LEDU1, LOW);
+}
+
+// ... (après moveForwardTimed) ...
+
+// =============================================================================
+// --- NOUVELLE FONCTION POUR DESSINER LA POINTE EN TRIANGLE "REMPLI" ---
+// =============================================================================
+void drawTrianglePoint() {
+    Serial.println("--- ETAPE 4: DESSIN POINTE TRIANGLE (Correction Dérive Progressive) ---");
+    SerialBT.println("Etape 4: Dessin Pointe (Correction Dérive Progressive)...");
+    if (LEDU1 > 0) digitalWrite(LEDU1, HIGH);
+
+    // Variables pour stocker les durées de virage
+    unsigned long first_left_turn_duration;
+    unsigned long recenter_left_turn_duration;
+
+    for (int i = 0; i < NUM_TRIANGLE_STROKES; ++i) {
+        float progress = (float)i / (float)(NUM_TRIANGLE_STROKES > 1 ? NUM_TRIANGLE_STROKES - 1 : 1);
+        unsigned long turn_duration_one_side = map(i, 0, NUM_TRIANGLE_STROKES - 1,
+                                                   MAX_TRIANGLE_TURN_DURATION_MS,
+                                                   MIN_TRIANGLE_TURN_DURATION_MS);
+        turn_duration_one_side = max(turn_duration_one_side, (unsigned long)10);
+
+        // CORRECTION : Doubler les virages à gauche après la première séquence
+        if (i == 0) {
+            // Première séquence : virage à gauche normal (la moitié du virage droit)
+            first_left_turn_duration = turn_duration_one_side / 2;
+        } else {
+            // Séquences suivantes : virage à gauche doublé (égal au virage droit)
+            first_left_turn_duration = turn_duration_one_side;
+        }
+        
+        // Le virage de recentrage à gauche est égal au premier virage à gauche
+        recenter_left_turn_duration = first_left_turn_duration;
+
+        Serial.print("  Stroke "); Serial.print(i + 1);
+        Serial.print(", Duree Gauche Init: "); Serial.print(first_left_turn_duration);
+        Serial.print(", Duree Droite: "); Serial.print(turn_duration_one_side);
+        Serial.print(", Duree Gauche Recentrage: "); Serial.println(recenter_left_turn_duration);
+        SerialBT.print("Stroke "); SerialBT.print(i + 1); SerialBT.print("/"); SerialBT.println(NUM_TRIANGLE_STROKES);
+
+        // 1. Tourner à GAUCHE du premier demi-angle
+        turnRobotTimed(false, TRIANGLE_TURN_SPEED_PWM, first_left_turn_duration);
+        delay(50);
+        moveForwardTimed(TRIANGLE_STROKE_ADVANCE_SPEED_PWM, TRIANGLE_STROKE_SEGMENT_ADVANCE_DURATION_MS);
+        delay(50);
+
+        // 2. Tourner à DROITE de l'angle complet
+        turnRobotTimed(true, TRIANGLE_TURN_SPEED_PWM, turn_duration_one_side);
+        delay(50);
+        moveForwardTimed(TRIANGLE_STROKE_ADVANCE_SPEED_PWM, TRIANGLE_STROKE_SEGMENT_ADVANCE_DURATION_MS);
+        delay(50);
+
+        // 3. Revenir vers l'axe initial en tournant à GAUCHE avec la durée corrigée PROGRESSIVE
+        turnRobotTimed(false, TRIANGLE_TURN_SPEED_PWM, recenter_left_turn_duration);
+        delay(100); // Pause pour stabiliser l'axe
+
+        // 4. Avancer pour le prochain "étage" du triangle (sauf pour le dernier stroke)
+        if (i < NUM_TRIANGLE_STROKES - 1) {
+            moveForwardTimed(TRIANGLE_BASE_ADVANCE_SPEED_PWM, TRIANGLE_INTER_STROKE_ADVANCE_DURATION_MS);
+            delay(100);
+        }
+    }
+
+    if (LEDU1 > 0) digitalWrite(LEDU1, LOW);
+    Serial.println("--- ETAPE 4: FIN DESSIN POINTE ---");
+}
+
+void moveForwardTimed(int speed_pwm, unsigned long duration_ms) {
+    Serial.print("--- ETAPE 3: AVANCE --- Duree: ");
+    Serial.print(duration_ms); Serial.print("ms à vitesse "); Serial.println(speed_pwm);
+    SerialBT.print("Etape 3: Avance pour ");
+    SerialBT.print(duration_ms); SerialBT.print("ms @"); SerialBT.println(speed_pwm);
+
+    // Optionnel: Allumer une LED pendant l'avancée
+    // pinMode(LEDU1, OUTPUT); // Assurez-vous que LEDU1 est configuré dans setup() si vous l'utilisez ici
+    // digitalWrite(LEDU1, HIGH);
+
+    setMotorSpeed(0, speed_pwm, true); // Moteur Droit en AVANT
+    setMotorSpeed(1, speed_pwm, true); // Moteur Gauche en AVANT
+    
+    delay(duration_ms); // Avancer pendant la durée spécifiée
+    
+    stopMotors(); // Arrêter après l'avancée
+
+    // Optionnel: Éteindre la LED
+    // digitalWrite(LEDU1, LOW);
+    Serial.println("--- ETAPE 3: FIN AVANCE ---");
+}
+
+
+// --- Séquence Principale (Juste Calib + Nord) ---
+void executeSequence() {
+    if (sequence_running) {
+        Serial.println("Sequence deja en cours !");
+        return;
+    }
+    sequence_running = true;
+    Serial.println(">>> DEBUT SEQUENCE (Calib+Nord+Avance+Pointe) <<<");
+    SerialBT.println(">>> Demarrage Sequence <<<");
+    if (LEDU1 > 0) pinMode(LEDU1, OUTPUT); // Assurez-vous que c'est fait dans setup
+    if (LEDU1 > 0) digitalWrite(LEDU1, HIGH);
+
+    // Étape 1: Calibration
+    calibrateMagnetometer();
+    delay(1000);
+
+    // Étape 2: Orientation Nord
+    orientNorth(ORIENTATION_ROTATE_SPEED_PWM);
+    delay(1000);
+
+    // Étape 3: Avancer
+    moveForwardTimed(FORWARD_MOVE_SPEED_PWM, FORWARD_MOVE_DURATION_MS);
+    delay(1000);
+
+    // --- NOUVELLE ETAPE 4: DESSINER LA POINTE DU TRIANGLE ---
+    drawTrianglePoint();
+    delay(1000); // Pause finale
+
+    if (LEDU1 > 0) digitalWrite(LEDU1, LOW);
+    Serial.println(">>> FIN SEQUENCE - LE ROBOT DOIT ETRE ARRETE <<<");
+    SerialBT.println(">>> FIN - ARRET TOTAL <<<");
+    sequence_running = false;
+}
+
+// --- Gestion BT et Setup/Loop ---
+void handleBluetoothCommands() { /* ... Idem version précédente ... */ 
+    if (SerialBT.available()) {
+        char command = SerialBT.read();
+        if ((command == 'S' || command == 's') && !sequence_running) {
+            sequence_requested = true;
+            Serial.println(">>> Commande 'S' recue <<<");
+        }
+        while(SerialBT.available()) { SerialBT.read(); }
+    }
+}
+void setup() { /* ... Idem version précédente ... */ 
+    Serial.begin(115200);
+    delay(500);
+    Serial.println("\n\n--- INITIALISATION DRAWBOT (NORD CONTINUOUS) ---");
+    pinMode(LEDU1, OUTPUT); digitalWrite(LEDU1, LOW);
+    Wire.begin(SDA_PIN, SCL_PIN);
+    setupLIS3MDL();
+    setupMotors();
+    stopMotors();
+    setupBluetooth();
+    Serial.println("--- Pret. Attente 'S'. ---");
+}
+void loop() { /* ... Idem version précédente ... */ 
+    handleBluetoothCommands();
+    if (sequence_requested) {
+        sequence_requested = false;
+        executeSequence();
+        Serial.println(">>> Attente nouvelle commande 'S'. Rien ne doit bouger. <<<");
+    }
+    delay(200);
+}

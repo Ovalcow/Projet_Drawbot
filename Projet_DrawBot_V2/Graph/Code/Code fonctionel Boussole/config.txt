@@ -1,0 +1,62 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// --- CONFIGURATION MATERIELLE ---
+#define LEDU1 25 // Optionnel : LED pour voir l'état
+
+#define EN_D 23 // Enable Moteur Droit
+#define EN_G 4  // Enable Moteur Gauche
+
+// Configuration des broches moteur (CORRIGÉE PAR VOUS)
+#define IN_1_D 18 // Moteur Droit IN1
+#define IN_2_D 19 // Moteur Droit IN2
+#define IN_1_G 17 // Moteur Gauche IN1
+#define IN_2_G 16 // Moteur Gauche IN2
+
+#define SDA_PIN 21 // Broche I2C SDA
+#define SCL_PIN 22 // Broche I2C SCL
+
+const uint8_t LIS3MDL_I2C_ADDRESS = 0x1E; // Adresse LIS3MDL
+
+// --- PARAMÈTRES DE NAVIGATION ET CALIBRATION ---
+const float MAGNETIC_DECLINATION_DEG = 2.33; // Votre valeur
+const float HEADING_ACCURACY_DEG = 2.0;      // Votre valeur
+const unsigned long CALIBRATION_DURATION_MS = 15000;
+
+// Vitesses PWM (0-255)
+const int CALIBRATION_ROTATE_SPEED_PWM = 140;
+const int ORIENTATION_ROTATE_SPEED_PWM = 140;
+const int FORWARD_MOVE_SPEED_PWM = 140;      // Vitesse pour l'avancée principale de la flèche
+
+// --- NOUVEAUX PARAMÈTRES POUR LE DESSIN DU TRIANGLE DE LA POINTE ---
+// Nombre de "gauche-droite" (strokes) pour former le triangle
+const int NUM_TRIANGLE_STROKES = 10;
+// Vitesse de rotation pour les petits virages du triangle
+const int TRIANGLE_TURN_SPEED_PWM = 145;
+// Vitesse d'avancée pendant les "strokes" du triangle
+const int TRIANGLE_STROKE_ADVANCE_SPEED_PWM = 145;
+// Vitesse d'avancée entre chaque "stroke" (pour faire progresser le triangle)
+const int TRIANGLE_BASE_ADVANCE_SPEED_PWM = 145;
+
+// Durées (en ms) - À AJUSTER SOIGNEUSEMENT PAR EXPÉRIMENTATION
+const unsigned long FORWARD_MOVE_DURATION_MS = 400; // Pour le corps de la flèche (5cm avec votre MS_PER_CM)
+
+// Durée MAXIMALE de rotation pour le début du "gauche-droite" (stroke le plus large)
+// Ajustez pour obtenir un angle initial (ex: 20-30 degrés par rapport à l'axe Nord)
+const unsigned long MAX_TRIANGLE_TURN_DURATION_MS = 80;
+// Durée MINIMALE de rotation pour la fin du "gauche-droite" (stroke le plus étroit)
+const unsigned long MIN_TRIANGLE_TURN_DURATION_MS = 10;
+// Petite durée d'avancée PENDANT un segment gauche ou droite du "stroke"
+const unsigned long TRIANGLE_STROKE_SEGMENT_ADVANCE_DURATION_MS = 10;
+// Petite durée d'avancée ENTRE chaque cycle complet de "gauche-droite" pour faire avancer le triangle
+const unsigned long TRIANGLE_INTER_STROKE_ADVANCE_DURATION_MS = 30;
+
+
+// --- AUTRES ---
+const char* BLUETOOTH_DEVICE_NAME = "Drawbot_Fleche_Finale"; // Nom mis à jour
+const int PWM_FREQUENCY = 5000;
+const int PWM_RESOLUTION = 8;
+const int PWM_CHANNEL_D1 = 0; const int PWM_CHANNEL_D2 = 1;
+const int PWM_CHANNEL_G1 = 2; const int PWM_CHANNEL_G2 = 3;
+
+#endif // CONFIG_H
