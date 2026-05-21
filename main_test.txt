@@ -1,0 +1,259 @@
+// ═══════════════════════════════════════════════════════════════
+//  TEST PID VITESSE — main_test_pid.cpp
+//
+//  Remplacer temporairement main.cpp par ce fichier pour tester.
+//  Le robot avance en continu, le moniteur série affiche :
+//    - RPM gauche / droit (mesure)
+//    - Erreur PID gauche / droit
+//    - Commande PID gauche / droit
+//    - PWM final gauche / droit
+//
+//  Pour changer les gains : modifier les valeurs en haut du fichier
+//  et re-uploader. Pas besoin de toucher à config.h.
+// ═══════════════════════════════════════════════════════════════
+
+#include <Arduino.h>
+#include <Wire.h>
+#include "config/config.h"
+#include "drivers/motors.h"
+#include "drivers/encoders.h"
+#include "drivers/imu.h"
+#include "control/pid.h"
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  PARAMÈTRES À MODIFIER ICI POUR TESTER                   ║
+// ╚═══════════════════════════════════════════════════════════╝
+
+// Gains PID vitesse — MODIFIER ICI
+float KP = 0.8f;
+float KI = 0.25f;
+float KD = 0.3f;
+
+// Consigne de vitesse (RPM)
+float TARGET_RPM = 70.0f;
+
+// PWM de base (point de départ avant correction PID)
+int BASE_PWM = 90;
+
+// Correction mécanique par roue (1.0 = pas de correction)
+float CORR_LEFT  = 0.85f;
+float CORR_RIGHT = 1.0f;
+
+// Période d'échantillonnage (ms)
+const int DT_MS = 20;
+const float DT  = DT_MS / 1000.0f;
+
+// Utiliser la correction gyro pour rester droit ?
+bool USE_GYRO_CORRECTION = false;
+float GYRO_GAIN = 2.0f;  // facteur de correction angulaire
+
+// ═══════════════════════════════════════════════════════════════
+//  Variables globales
+// ═══════════════════════════════════════════════════════════════
+PIDController pidL(KP, KI, KD, -PWM_MAX, PWM_MAX);
+PIDController pidR(KP, KI, KD, -PWM_MAX, PWM_MAX);
+
+long lastTickL = 0;
+long lastTickR = 0;
+unsigned long lastPrint = 0;
+int cycleCount = 0;
+
+// ═══════════════════════════════════════════════════════════════
+//  Commande série pour changer les gains en live
+// ═══════════════════════════════════════════════════════════════
+void checkSerial()
+{
+  if (!Serial.available()) return;
+
+  String line = Serial.readStringUntil('\n');
+  line.trim();
+
+  // Format : P1.5  ou  I0.3  ou  D0.1  ou  T80  ou  B170  ou  S (stop)  ou  G (go)
+  char cmd = line.charAt(0);
+  float val = line.substring(1).toFloat();
+
+  switch (cmd) {
+    case 'P': case 'p':
+      KP = val;
+      pidL.setGains(KP, KI, KD);
+      pidR.setGains(KP, KI, KD);
+      Serial.printf(">>> Kp = %.3f\n", KP);
+      break;
+    case 'I': case 'i':
+      KI = val;
+      pidL.setGains(KP, KI, KD);
+      pidR.setGains(KP, KI, KD);
+      Serial.printf(">>> Ki = %.3f\n", KI);
+      break;
+    case 'D': case 'd':
+      KD = val;
+      pidL.setGains(KP, KI, KD);
+      pidR.setGains(KP, KI, KD);
+      Serial.printf(">>> Kd = %.3f\n", KD);
+      break;
+    case 'T': case 't':
+      TARGET_RPM = val;
+      Serial.printf(">>> Target RPM = %.1f\n", TARGET_RPM);
+      break;
+    case 'B': case 'b':
+      BASE_PWM = (int)val;
+      Serial.printf(">>> Base PWM = %d\n", BASE_PWM);
+      break;
+    case 'G': case 'g':
+      GYRO_GAIN = val;
+      Serial.printf(">>> Gyro gain = %.2f\n", GYRO_GAIN);
+      break;
+    case 'R': case 'r':
+      pidL.reset();
+      pidR.reset();
+      resetEncoders();
+      Serial.println(">>> PID reset");
+      break;
+    case 'S': case 's':
+      stopMotors();
+      Serial.println(">>> STOP — envoyer n'importe quel autre commande pour reprendre");
+      while (!Serial.available()) delay(100);
+      Serial.readStringUntil('\n');
+      pidL.reset();
+      pidR.reset();
+      resetEncoders();
+      lastTickL = 0;
+      lastTickR = 0;
+      Serial.println(">>> Reprise");
+      break;
+    default:
+      Serial.println("Commandes : P1.5 I0.3 D0.1 T80 B170 G2.0 R(reset) S(stop)");
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+void setup()
+{
+  Serial.begin(115200);
+  delay(500);
+
+  Serial.println("\n════════════════════════════════════════");
+  Serial.println("  TEST PID VITESSE — Drawbot");
+  Serial.println("════════════════════════════════════════");
+  Serial.printf("  Kp=%.3f  Ki=%.3f  Kd=%.3f\n", KP, KI, KD);
+  Serial.printf("  Target RPM=%.1f  Base PWM=%d\n", TARGET_RPM, BASE_PWM);
+  Serial.printf("  Gyro correction=%s  gain=%.1f\n",
+                USE_GYRO_CORRECTION ? "ON" : "OFF", GYRO_GAIN);
+  Serial.println("════════════════════════════════════════");
+  Serial.println("Commandes série :");
+  Serial.println("  P1.5   → changer Kp");
+  Serial.println("  I0.3   → changer Ki");
+  Serial.println("  D0.1   → changer Kd");
+  Serial.println("  T80    → changer target RPM");
+  Serial.println("  B170   → changer base PWM");
+  Serial.println("  G2.0   → changer gyro gain");
+  Serial.println("  R      → reset PID");
+  Serial.println("  S      → stop (pause)");
+  Serial.println("════════════════════════════════════════");
+  Serial.println("");
+  Serial.println("cycle | rpmL  | rpmR  | errL  | errR  | cmdL  | cmdR  | pwmL | pwmR | drift");
+  Serial.println("------|-------|-------|-------|-------|-------|-------|------|------|------");
+
+  // I2C pour le gyro
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire.setClock(400000);
+
+  // Init hardware
+  setupMotors();
+  setupEncoders();
+
+  bool imuOK = setupIMU();
+  if (!imuOK) {
+    Serial.println("[WARN] IMU non détectée — correction gyro désactivée");
+    USE_GYRO_CORRECTION = false;
+  }
+
+  stopMotors();
+  resetEncoders();
+  resetAngle();
+
+  delay(2000);
+  Serial.println(">>> Démarrage moteurs...\n");
+}
+
+// ═══════════════════════════════════════════════════════════════
+void loop()
+{
+  // Vérifier commandes série
+  checkSerial();
+
+  // ── Mesure RPM ──
+  long tickL = getCountLeft();
+  long tickR = getCountRight();
+
+  long deltaL = tickL - lastTickL;
+  long deltaR = tickR - lastTickR;
+  lastTickL = tickL;
+  lastTickR = tickR;
+
+  float rpmL = computeRPM(deltaL, DT);
+  float rpmR = computeRPM(deltaR, DT);
+
+    // Filtre passe-bas (lissage)
+  static float rpmL_filt = 0, rpmR_filt = 0;
+  rpmL_filt = 0.85f * rpmL_filt + 0.15f * fabsf(rpmL);
+  rpmR_filt = 0.85f * rpmR_filt + 0.15f * fabsf(rpmR);
+
+  // ── PID vitesse ──
+  float cmdL = pidL.compute(TARGET_RPM, rpmL_filt, DT);
+  float cmdR = pidR.compute(TARGET_RPM, rpmR_filt, DT);
+
+  cmdL = constrain(cmdL, -120.0f, 120.0f);
+  cmdR = constrain(cmdR, -120.0f, 120.0f);
+
+  // ── Correction gyro (garder le cap droit) ──
+  float drift = 0.0f;
+  if (USE_GYRO_CORRECTION) {
+    updateAngle(DT);
+    drift = getAngle();
+  }
+  float gyroCorr = drift * GYRO_GAIN;
+
+  // ── PWM final ──
+  int pwmL = constrain((int)(BASE_PWM + cmdL - gyroCorr), 0, PWM_MAX);
+  int pwmR = constrain((int)(BASE_PWM + cmdR + gyroCorr), 0, PWM_MAX);
+
+  // Appliquer les corrections mécaniques
+  int finalL = constrain((int)(pwmL * CORR_LEFT),  0, PWM_MAX);
+  int finalR = constrain((int)(pwmR * CORR_RIGHT), 0, PWM_MAX);
+
+  // ── Appliquer aux moteurs ──
+  setMotorPWM(LEFT_MOTOR,  finalL);
+  setMotorPWM(RIGHT_MOTOR, finalR);
+
+  // ── Affichage toutes les 200ms (10 cycles) ──
+  cycleCount++;
+  if (millis() - lastPrint >= 200) {
+    lastPrint = millis();
+
+    // Tableau lisible dans le moniteur série classique
+    Serial.printf("%5d | %5.1f | %5.1f | %5.1f | %5.1f | %5.1f | %5.1f | %4d | %4d | %5.1f\n",
+      cycleCount,
+      rpmL, rpmR,
+      pidL.getError(), pidR.getError(),
+      cmdL, cmdR,
+      finalL, finalR,
+      drift
+    );
+
+    // ── Teleplot (format >nom:valeur) ──
+    Serial.printf(">rpmL:%.1f\n",    rpmL_filt);
+    Serial.printf(">rpmR:%.1f\n",    rpmR_filt);
+    Serial.printf(">target:%.1f\n",  TARGET_RPM);
+    Serial.printf(">errL:%.1f\n",    pidL.getError());
+    Serial.printf(">errR:%.1f\n",    pidR.getError());
+    Serial.printf(">cmdL:%.1f\n",    cmdL);
+    Serial.printf(">cmdR:%.1f\n",    cmdR);
+    Serial.printf(">pwmL:%d\n",      finalL);
+    Serial.printf(">pwmR:%d\n",      finalR);
+    Serial.printf(">drift:%.1f\n",   drift);
+  }
+
+  delay(DT_MS);
+}
