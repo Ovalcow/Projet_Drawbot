@@ -2,13 +2,10 @@
 #include "motors.h"
 #include "config.h"
 
-extern RobotProfile activeProfile;
+static const unsigned long STEP_PAUSE_MS = 500;
 
-static const unsigned long STEP_PAUSE_MS = 800;
-
-// -------------------------------------------------------
 void sequenceEscalier() {
-  DBG("[SEQ] Escalier debut");
+  DBG("[SEQ] S1 escalier debut");
 
   moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_20cm);
   delay(STEP_PAUSE_MS);
@@ -16,45 +13,47 @@ void sequenceEscalier() {
   turnRobot(TURN_LEFT, activeProfile.pwm_turn, activeProfile.dur_90deg);
   delay(STEP_PAUSE_MS);
 
-  if (activeProfile.dur_10cm > 0) {
-    moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_10cm);
-    delay(STEP_PAUSE_MS);
-  }
+  moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_10cm);
+  delay(STEP_PAUSE_MS);
 
   turnRobot(TURN_RIGHT, activeProfile.pwm_turn, activeProfile.dur_90deg);
   delay(STEP_PAUSE_MS);
 
   moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_40cm);
 
-  DBG("[SEQ] Escalier fin");
+  DBG("[SEQ] S1 escalier fin");
 }
 
-// -------------------------------------------------------
-void sequenceCarre() {
-  DBG("[SEQ] Carre debut");
+void sequenceCircle(int radius_cm) {
+  DBG2("[SEQ] S2 cercle rayon cm=", radius_cm);
 
-  for (int i = 0; i < 4; i++) {
-    moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_20cm);
-    delay(STEP_PAUSE_MS);
-    turnRobot(TURN_RIGHT, activeProfile.pwm_turn, activeProfile.dur_90deg);
-    delay(STEP_PAUSE_MS);
-  }
+  // Version simple sans encodeurs : on avance en arc pendant une duree estimee.
+  // Le rayon reel depend de l'ecartement des roues, de l'adherence et du sol.
+  const int safe_radius = constrain(radius_cm, 8, 80);
+  const unsigned long duration_ms = map(safe_radius, 8, 80, 2500, 7000);
+  turnRobot(TURN_RIGHT, activeProfile.pwm_turn, duration_ms);
 
-  DBG("[SEQ] Carre fin");
+  DBG("[SEQ] S2 cercle fin");
 }
 
-// -------------------------------------------------------
-void sequenceZigzag() {
-  DBG("[SEQ] Zigzag debut");
+void sequenceNorthArrow() {
+  DBG("[SEQ] S3 fleche Nord debut");
 
-  for (int i = 0; i < 3; i++) {
-    moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_20cm);
-    delay(STEP_PAUSE_MS);
-    int dir = (i % 2 == 0) ? TURN_LEFT : TURN_RIGHT;
-    turnRobot(dir, activeProfile.pwm_turn, activeProfile.dur_90deg / 2);
-    delay(STEP_PAUSE_MS);
-  }
-  moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_20cm);
+  // Sans boussole ni gyroscope, "Nord" signifie ici la direction initiale du robot.
+  // La sequence trace une tige puis deux petits traits formant une pointe de fleche.
+  moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_40cm);
+  delay(STEP_PAUSE_MS);
 
-  DBG("[SEQ] Zigzag fin");
+  turnRobot(TURN_LEFT, activeProfile.pwm_turn, activeProfile.dur_90deg / 2);
+  delay(STEP_PAUSE_MS);
+  moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_10cm);
+  delay(STEP_PAUSE_MS);
+
+  moveRobotStraight(BACKWARD, activeProfile.pwm_straight, activeProfile.dur_10cm);
+  delay(STEP_PAUSE_MS);
+  turnRobot(TURN_RIGHT, activeProfile.pwm_turn, activeProfile.dur_90deg);
+  delay(STEP_PAUSE_MS);
+  moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_10cm);
+
+  DBG("[SEQ] S3 fleche Nord fin");
 }

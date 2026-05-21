@@ -1,20 +1,21 @@
-#include <Arduino.h>
 #ifndef WIFI_SERVER_H
 #define WIFI_SERVER_H
 
-// Initialise GPIO bouton/LED, ne démarre pas le WiFi
+#include <Arduino.h>
+
+// Initialise le bouton, la LED, le point d'acces WiFi et le serveur HTTP.
 void setupWifi();
 
-// À appeler dans loop() : gère le bouton BOOT + les requêtes HTTP
+// A appeler dans loop() : gere le bouton BOOT et les requetes HTTP.
 void loopWifi();
 
-// Active le point d'accès WiFi et le serveur HTTP
+// Active le point d'acces WiFi et le serveur HTTP.
 void enableWifi();
 
-// Coupe le WiFi et le serveur HTTP
+// Coupe le WiFi et le serveur HTTP.
 void disableWifi();
 
-// Traite une commande texte (identique aux anciennes commandes BT)
+// Traite une commande texte recue par HTTP.
 void handleCommand(const String& cmd, String& response);
 
 #endif // WIFI_SERVER_H

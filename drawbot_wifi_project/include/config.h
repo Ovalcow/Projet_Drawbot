@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // ============================================================
-//  DEBUG — mettre à 0 pour désactiver les logs Serial verbose
+//  DEBUG - mettre a 0 pour desactiver les logs Serial verbose
 // ============================================================
 #define DEBUG_ENABLED 1
 
@@ -18,37 +18,40 @@
 
 // ============================================================
 //  WIFI ACCESS POINT
-//  L'ESP32 crée son propre réseau WiFi.
-//  Connecte-toi depuis ton téléphone/PC puis ouvre :
-//  http://192.168.4.1  dans le navigateur.
+//  L'ESP32 cree son propre reseau WiFi.
+//  Connecte-toi au reseau Drawbot puis ouvre :
+//  http://192.168.4.1
 // ============================================================
-#define WIFI_AP_SSID      "Drawbot"       // Nom du réseau WiFi visible
-#define WIFI_AP_PASSWORD  "drawbot123"    // Mot de passe (min 8 car.) — mettre "" pour réseau ouvert
-#define WIFI_AP_IP        "192.168.4.1"    // Adresse habituelle du point d acces ESP32
-#define WIFI_AP_CHANNEL   1               // Canal WiFi (1-13)
-#define HTTP_PORT         80              // Port du serveur web
+#define WIFI_AP_SSID      "Drawbot"
+#define WIFI_AP_PASSWORD  "drawbot123"
+#define WIFI_AP_IP        "192.168.4.1"
+#define WIFI_AP_GATEWAY   "192.168.4.1"
+#define WIFI_AP_SUBNET    "255.255.255.0"
+#define WIFI_AP_CHANNEL   1
+#define HTTP_PORT         80
 
 // ============================================================
-//  BOUTON BOOT & LED INTÉGRÉE
-//  Appui sur BOOT (GPIO0) : active / coupe le WiFi
-//  LED fixe     = WiFi actif   (robot accessible)
-//  LED clignotante = WiFi inactif
+//  BOUTON BOOT & LED INTEGREE
+//  BOOT (GPIO0) permet de couper ou relancer le WiFi.
+//  LED fixe = WiFi actif, LED clignotante = WiFi inactif.
 // ============================================================
-#define WIFI_TOGGLE_PIN   0   // GPIO 0 = bouton BOOT (actif à LOW)
-#define WIFI_LED_PIN      2   // GPIO 2 = LED bleue intégrée
+#define WIFI_TOGGLE_PIN   0
+#define WIFI_LED_PIN      2
 
 // ============================================================
 //  BROCHES MOTEURS
+//  Pins projet : EN_G=4, EN_D=23, IN_1_G=17, IN_2_G=16,
+//  IN_1_D=19, IN_2_D=18.
 // ============================================================
 #define EN_G_PIN    4
-#define EN_D_PIN   23
-#define IN_1_G_PIN 17
-#define IN_2_G_PIN 16
-#define IN_1_D_PIN 19
-#define IN_2_D_PIN 18
+#define EN_D_PIN    23
+#define IN_1_G_PIN  17
+#define IN_2_G_PIN  16
+#define IN_1_D_PIN  19
+#define IN_2_D_PIN  18
 
 // ============================================================
-//  PWM
+//  PWM ESP32
 // ============================================================
 #define PWM_FREQ          5000
 #define PWM_RESOLUTION    8
@@ -70,7 +73,8 @@
 #define TURN_RIGHT  1
 
 // ============================================================
-//  PROFILS DE RÉGLAGES (sélectionnables depuis l'interface web)
+//  PROFILS DE REGLAGES
+//  Les durees sont a calibrer sur le robot reel.
 // ============================================================
 struct RobotProfile {
   const char*   name;
@@ -85,15 +89,16 @@ struct RobotProfile {
   unsigned long dur_90deg;
 };
 
-// Profil 0 — Lent / précis
-// Profil 1 — Normal (valeurs d'origine)
-// Profil 2 — Rapide
 static const RobotProfile PROFILES[] = {
-  { "Lent",   130, 140, 1.0f, 0.94f, 0.45f,  750, 375,  900, 1900 },
-  { "Normal", 190, 200, 1.0f, 0.94f, 0.45f,  550,   0,  600, 1450 },
-  { "Rapide", 230, 240, 1.0f, 0.94f, 0.40f,  400,   0,  450, 1100 },
+  { "Lent",   130, 140, 1.0f, 0.94f, 0.45f, 750, 375, 1500, 1900 },
+  { "Normal", 190, 200, 1.0f, 0.94f, 0.45f, 550, 275, 1100, 1450 },
+  { "Rapide", 230, 240, 1.0f, 0.94f, 0.40f, 400, 200,  800, 1100 },
 };
+
 #define PROFILE_COUNT         3
-#define DEFAULT_PROFILE_INDEX 1   // 0=Lent, 1=Normal, 2=Rapide
+#define DEFAULT_PROFILE_INDEX 1
+
+// Profil actif partage par les modules moteurs, sequences et serveur web.
+extern RobotProfile activeProfile;
 
 #endif // CONFIG_H

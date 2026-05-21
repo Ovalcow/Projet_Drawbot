@@ -1,13 +1,15 @@
 #ifndef SEQUENCES_H
 #define SEQUENCES_H
 
-// Séquence escalier (5 étapes : avance, tourne G, avance, tourne D, avance)
+// S1 : escalier.
+// Avancer 20 cm, gauche 90 deg, avancer 10 cm, droite 90 deg, avancer 40 cm.
 void sequenceEscalier();
 
-// Séquence carré : 4 × (avance 20cm + tourne 90° droite)
-void sequenceCarre();
+// S2 : cercle simple. Le rayon est approxime par le ratio roue interieure.
+// radius_cm est garde pour l'interface et les futurs reglages fins.
+void sequenceCircle(int radius_cm = 20);
 
-// Séquence zigzag : alterne gauche/droite 3 fois
-void sequenceZigzag();
+// S3 : fleche orientee Nord, sequence de test propre sans capteurs.
+void sequenceNorthArrow();
 
 #endif // SEQUENCES_H
