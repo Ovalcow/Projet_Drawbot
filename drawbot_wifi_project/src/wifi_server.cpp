@@ -375,6 +375,16 @@ void handleCommand(const String& rawCmd, String& response) {
   if (cmd.equalsIgnoreCase("S2")) { sequenceCarre();    response = "OK carre";    return; }
   if (cmd.equalsIgnoreCase("S3")) { sequenceZigzag();   response = "OK zigzag";   return; }
 
+  // Test encodeurs (Serial Monitor)
+  if (cmd.equalsIgnoreCase("TESTENC")) {
+    long g0 = getEncG();
+    long d0 = getEncD();
+    Serial.print("[TESTENC] start G="); Serial.print(g0);
+    Serial.print(" D="); Serial.println(d0);
+    response = "OK testenc start";
+    return;
+  }
+
   // Helper parse deux entiers "CMD,a,b"
   auto parseTwoInts = [&](int& a, unsigned long& b) -> bool {
     int c1 = cmd.indexOf(',');

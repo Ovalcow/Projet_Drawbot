@@ -48,6 +48,25 @@
 #define IN_2_D_PIN 18
 
 // ============================================================
+//  ENCODEURS (quadrature)
+// ============================================================
+// Gauche
+#define ENC_G_CH_A 32
+#define ENC_G_CH_B 33
+// Droite
+#define ENC_D_CH_A 27
+#define ENC_D_CH_B 14
+
+// Conversion mécanique : ticks par tour (A FIXER après test)
+// TODO: Fais tourner une roue ~1 tour mécanique puis relève les ticks
+// mesurés sur Serial (getEncG/getEncD).
+#ifndef ENC_TICKS_PER_REV
+#define ENC_TICKS_PER_REV 20
+
+#endif
+
+
+// ============================================================
 //  PWM
 // ============================================================
 #define PWM_FREQ          5000
@@ -90,9 +109,10 @@ struct RobotProfile {
 // Profil 2 — Rapide
 static const RobotProfile PROFILES[] = {
   { "Lent",   130, 140, 1.0f, 0.94f, 0.45f,  750, 375,  900, 1900 },
-  { "Normal", 190, 200, 1.0f, 0.94f, 0.45f,  550,   0,  600, 1450 },
-  { "Rapide", 230, 240, 1.0f, 0.94f, 0.40f,  400,   0,  450, 1100 },
+  { "Normal", 190, 200, 1.0f, 0.94f, 0.45f,  550, 375,  600, 1450 },
+  { "Rapide", 230, 240, 1.0f, 0.94f, 0.40f,  400, 375,  450, 1100 },
 };
+
 #define PROFILE_COUNT         3
 #define DEFAULT_PROFILE_INDEX 1   // 0=Lent, 1=Normal, 2=Rapide
 

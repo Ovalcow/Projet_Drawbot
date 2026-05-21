@@ -13,7 +13,7 @@ void sequenceEscalier() {
   moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_20cm);
   delay(STEP_PAUSE_MS);
 
-  turnRobot(TURN_LEFT, activeProfile.pwm_turn, activeProfile.dur_90deg);
+  turnRobotPivot(TURN_LEFT, activeProfile.pwm_turn, activeProfile.dur_90deg);
   delay(STEP_PAUSE_MS);
 
   if (activeProfile.dur_10cm > 0) {
@@ -21,8 +21,9 @@ void sequenceEscalier() {
     delay(STEP_PAUSE_MS);
   }
 
-  turnRobot(TURN_RIGHT, activeProfile.pwm_turn, activeProfile.dur_90deg);
+  turnRobotPivot(TURN_RIGHT, activeProfile.pwm_turn, activeProfile.dur_90deg);
   delay(STEP_PAUSE_MS);
+
 
   moveRobotStraight(FORWARD, activeProfile.pwm_straight, activeProfile.dur_40cm);
 

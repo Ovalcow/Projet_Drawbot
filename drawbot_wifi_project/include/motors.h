@@ -22,4 +22,21 @@ void moveRobotStraight(int direction, int base_pwm, unsigned long duration_ms);
 // turn_direction : TURN_LEFT | TURN_RIGHT
 void turnRobot(int turn_direction, int base_pwm, unsigned long duration_ms);
 
+// Tourne sur place (pivot) : une roue en avant, l'autre en arrière
+// turn_direction : TURN_LEFT | TURN_RIGHT
+void turnRobotPivot(int turn_direction, int base_pwm, unsigned long duration_ms);
+
+// -------------------------------------------------------
+//  Encodeurs + fermeture boucle (Phase 2.1)
+// -------------------------------------------------------
+long getEncG();
+long getEncD();
+
+// Avance/recul d'une distance donnée (cm) en boucle fermée
+void moveDistance_cm(float dist_cm);
+
+// Rotation sur place d'un angle donné (degrés) en boucle fermée
+void rotateDeg(float deg);
+
 #endif // MOTORS_H
+

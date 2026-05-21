@@ -2,7 +2,7 @@
 #include <BluetoothSerial.h>
 #include "config.h" 
 #include "ControleurPID.h" // Notre classe PID
-
+/*
 // --- Bluetooth ---
 BluetoothSerial SerialBT_INSTANCE;
 String btCommandeRecue = "";
@@ -43,26 +43,26 @@ void envoyerDonneesTeleplotAsser();
 
 
 // --- Implémentation Bluetooth ---
-void callbackBT(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) { /* ... identique ... */ 
+void callbackBT(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) { 
     if (event == ESP_SPP_SRV_OPEN_EVT) { Serial.println("Client BT Connecté"); btClientConnecte = true; } 
     else if (event == ESP_SPP_CLOSE_EVT) { Serial.println("Client BT Déconnecté"); btClientConnecte = false; }
 }
-void setupBluetooth() { /* ... identique ... */ 
+void setupBluetooth() {  
     if (!SerialBT_INSTANCE.begin(BLUETOOTH_DEVICE_NAME)) { Serial.println("ERREUR Init BT!"); } 
     else { Serial.print("BT OK. Nom: "); Serial.println(BLUETOOTH_DEVICE_NAME); }
     SerialBT_INSTANCE.register_callback(callbackBT);
 }
-void envoyerMsgBT(const String& message) { /* ... identique ... */ 
+void envoyerMsgBT(const String& message) { 
     if (btClientConnecte) { SerialBT_INSTANCE.println(message); }
     Serial.print("BT Msg: ["); Serial.print(message); Serial.println("]");
 }
 
 // --- Implémentation Encodeurs ---
-void IRAM_ATTR isrEncG_A() { /* ... identique ... */ int valB = digitalRead(ENCODEUR_G_CHB_PIN); if (digitalRead(ENCODEUR_G_CHA_PIN) == valB) { compteurEncodeurG--; } else { compteurEncodeurG++; }}
-void IRAM_ATTR isrEncG_B() { /* ... identique ... */ int valA = digitalRead(ENCODEUR_G_CHA_PIN); if (digitalRead(ENCODEUR_G_CHB_PIN) != valA) { compteurEncodeurG--; } else { compteurEncodeurG++; }}
-void IRAM_ATTR isrEncD_A() { /* ... identique ... */ int valB = digitalRead(ENCODEUR_D_CHA_PIN); if (digitalRead(ENCODEUR_D_CHA_PIN) != valB) { compteurEncodeurD--; } else { compteurEncodeurD++; }}
-void IRAM_ATTR isrEncD_B() { /* ... identique ... */ int valA = digitalRead(ENCODEUR_D_CHA_PIN); if (digitalRead(ENCODEUR_D_CHB_PIN) == valA) { compteurEncodeurD--; } else { compteurEncodeurD++; }}
-void setupEncodeurs() { /* ... identique ... */
+void IRAM_ATTR isrEncG_A() {  int valB = digitalRead(ENCODEUR_G_CHB_PIN); if (digitalRead(ENCODEUR_G_CHA_PIN) == valB) { compteurEncodeurG--; } else { compteurEncodeurG++; }}
+void IRAM_ATTR isrEncG_B() {  int valA = digitalRead(ENCODEUR_G_CHA_PIN); if (digitalRead(ENCODEUR_G_CHB_PIN) != valA) { compteurEncodeurG--; } else { compteurEncodeurG++; }}
+void IRAM_ATTR isrEncD_A() {  int valB = digitalRead(ENCODEUR_D_CHA_PIN); if (digitalRead(ENCODEUR_D_CHA_PIN) != valB) { compteurEncodeurD--; } else { compteurEncodeurD++; }}
+void IRAM_ATTR isrEncD_B() {  int valA = digitalRead(ENCODEUR_D_CHA_PIN); if (digitalRead(ENCODEUR_D_CHB_PIN) == valA) { compteurEncodeurD--; } else { compteurEncodeurD++; }}
+void setupEncodeurs() { 
     pinMode(ENCODEUR_G_CHA_PIN, INPUT_PULLUP); pinMode(ENCODEUR_G_CHB_PIN, INPUT_PULLUP);
     pinMode(ENCODEUR_D_CHA_PIN, INPUT_PULLUP); pinMode(ENCODEUR_D_CHB_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(ENCODEUR_G_CHA_PIN), isrEncG_A, CHANGE);
@@ -71,18 +71,18 @@ void setupEncodeurs() { /* ... identique ... */
     attachInterrupt(digitalPinToInterrupt(ENCODEUR_D_CHB_PIN), isrEncD_B, CHANGE);
     compteurEncodeurG = 0; compteurEncodeurD = 0; Serial.println("Encodeurs initialisés et RAZ.");
 }
-void razEncodeurs() { /* ... identique ... */ noInterrupts(); compteurEncodeurG = 0; compteurEncodeurD = 0; interrupts(); Serial.println("Compteurs encodeurs RAZ.");}
+void razEncodeurs() {  noInterrupts(); compteurEncodeurG = 0; compteurEncodeurD = 0; interrupts(); Serial.println("Compteurs encodeurs RAZ.");}
 long getEncG() { long val; noInterrupts(); val = compteurEncodeurG; interrupts(); return val; }
 long getEncD() { long val; noInterrupts(); val = compteurEncodeurD; interrupts(); return val; }
 
 // --- Implémentation Moteurs ---
-void setupMoteurs() { /* ... identique ... */
+void setupMoteurs() { 
     pinMode(MOTEUR_D_EN_PIN, OUTPUT); pinMode(MOTEUR_D_IN1_PIN, OUTPUT); pinMode(MOTEUR_D_IN2_PIN, OUTPUT);
     pinMode(MOTEUR_G_EN_PIN, OUTPUT); pinMode(MOTEUR_G_IN1_PIN, OUTPUT); pinMode(MOTEUR_G_IN2_PIN, OUTPUT);
     digitalWrite(MOTEUR_D_EN_PIN, LOW); digitalWrite(MOTEUR_G_EN_PIN, LOW); 
     Serial.println("Moteurs initialisés (désactivés).");
 }
-void cmdMoteur(int pinEN, int pinIN1, int pinIN2, int puissance, bool estDroit) { /* ... identique ... */
+void cmdMoteur(int pinEN, int pinIN1, int pinIN2, int puissance, bool estDroit) { 
     if (puissance == 0) { digitalWrite(pinEN, HIGH); digitalWrite(pinIN1, LOW); digitalWrite(pinIN2, LOW); return; } // Freinage actif
     digitalWrite(pinEN, HIGH); int pAbs = abs(puissance); if (pAbs > 255) pAbs = 255;
     bool avant = (puissance > 0); // Convention: puissance positive = AVANT pour le PID
@@ -93,11 +93,11 @@ void cmdMoteur(int pinEN, int pinIN1, int pinIN2, int puissance, bool estDroit) 
         if (avant) { analogWrite(pinIN1, pAbs); digitalWrite(pinIN2, LOW); } 
         else { digitalWrite(pinIN1, LOW); analogWrite(pinIN2, pAbs); } // ARRIERE
     }}
-void appliquerPuissanceMoteurs(int puissanceG, int puissanceD) { /* ... identique ... */
+void appliquerPuissanceMoteurs(int puissanceG, int puissanceD) { 
     cmdMoteur(MOTEUR_G_EN_PIN, MOTEUR_G_IN1_PIN, MOTEUR_G_IN2_PIN, puissanceG, false);
     cmdMoteur(MOTEUR_D_EN_PIN, MOTEUR_D_IN1_PIN, MOTEUR_D_IN2_PIN, puissanceD, true);
 }
-void stopMoteurs() { /* ... identique ... */
+void stopMoteurs() { 
     Serial.println("Moteurs: STOP.");
     cmdMoteur(MOTEUR_G_EN_PIN, MOTEUR_G_IN1_PIN, MOTEUR_G_IN2_PIN, 0, false); 
     cmdMoteur(MOTEUR_D_EN_PIN, MOTEUR_D_IN1_PIN, MOTEUR_D_IN2_PIN, 0, true);  
@@ -274,4 +274,27 @@ void loop() {
     }
     
     delay(10); // Boucle principale à ~100Hz
+}*/
+#define ENC_G_A 32
+#define ENC_G_B 33
+#define ENC_D_A 27
+#define ENC_D_B 14
+
+volatile long cG = 0, cD = 0;
+
+void IRAM_ATTR isrGA() { cG += (digitalRead(ENC_G_A) == digitalRead(ENC_G_B)) ? 1 : -1; }
+void IRAM_ATTR isrDA() { cD += (digitalRead(ENC_D_A) == digitalRead(ENC_D_B)) ? 1 : -1; }
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ENC_G_A, INPUT_PULLUP); pinMode(ENC_G_B, INPUT_PULLUP);
+  pinMode(ENC_D_A, INPUT_PULLUP); pinMode(ENC_D_B, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_G_A), isrGA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_D_A), isrDA, CHANGE);
+}
+
+void loop() {
+  Serial.print("G="); Serial.print(cG);
+  Serial.print("  D="); Serial.println(cD);
+  delay(1000);
 }
