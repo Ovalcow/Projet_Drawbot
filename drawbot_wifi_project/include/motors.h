@@ -1,42 +1,36 @@
-#ifndef MOTORS_H
-#define MOTORS_H
+#pragma once
 
-#include "config.h"
+#include <Arduino.h>
 
-// Initialise les canaux PWM et les broches moteurs
+enum class MotionKind : uint8_t {
+  Stopped,
+  Forward,
+  Backward,
+  TurnLeft,
+  TurnRight,
+  Custom,
+};
+
 void setupMotors();
+void updateMotors();
 
-// Commande un moteur individuel
-// motor_id : LEFT_MOTOR | RIGHT_MOTOR
-// direction : FORWARD | BACKWARD | STOP
-// pwm_value : 0-255
-void setMotorPower(int motor_id, int direction, int pwm_value);
-
-// Arrête les deux moteurs immédiatement
+void setMotorPower(bool leftMotor, int power);
+void setMotors(int leftPower, int rightPower);
+void setMotors(int leftPower, int rightPower, uint32_t durationMs);
 void stopMotors();
 
-// Avance ou recule en ligne droite pendant duration_ms millisecondes
-void moveRobotStraight(int direction, int base_pwm, unsigned long duration_ms);
+void moveRobotStraight(int pwm, uint32_t durationMs, bool forward = true);
+void turnRobot(bool left, int pwm, uint32_t durationMs);
 
-// Tourne en arc de cercle (les deux roues avancent, la roue intérieure ralentie)
-// turn_direction : TURN_LEFT | TURN_RIGHT
-void turnRobot(int turn_direction, int base_pwm, unsigned long duration_ms);
+void testMotors();
+void testPWM();
+void testDirections();
 
-// Tourne sur place (pivot) : une roue en avant, l'autre en arrière
-// turn_direction : TURN_LEFT | TURN_RIGHT
-void turnRobotPivot(int turn_direction, int base_pwm, unsigned long duration_ms);
-
-// -------------------------------------------------------
-//  Encodeurs + fermeture boucle (Phase 2.1)
-// -------------------------------------------------------
-long getEncG();
-long getEncD();
-
-// Avance/recul d'une distance donnée (cm) en boucle fermée
-void moveDistance_cm(float dist_cm);
-
-// Rotation sur place d'un angle donné (degrés) en boucle fermée
-void rotateDeg(float deg);
-
-#endif // MOTORS_H
-
+bool isMotionActive();
+MotionKind currentMotionKind();
+uint32_t currentMotionRemainingMs();
+int currentLeftPower();
+int currentRightPower();
+const char* motionKindToString(MotionKind kind);
+int clampPwm(int pwm);
+uint32_t clampDuration(uint32_t durationMs);

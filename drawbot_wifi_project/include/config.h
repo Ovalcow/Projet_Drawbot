@@ -1,119 +1,75 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#pragma once
 
 #include <Arduino.h>
 
-// ============================================================
-//  DEBUG — mettre à 0 pour désactiver les logs Serial verbose
-// ============================================================
-#define DEBUG_ENABLED 1
+// Drawbot - pins imposes par le PDF PRJ_SB_v2026_v2.
+constexpr uint8_t LEDU1_PIN = 25;
+constexpr uint8_t LEDU2_PIN = 26;
 
-#if DEBUG_ENABLED
-  #define DBG(msg)     Serial.println(msg)
-  #define DBG2(a, b)   { Serial.print(a); Serial.println(b); }
-#else
-  #define DBG(msg)
-  #define DBG2(a, b)
-#endif
+constexpr uint8_t EN_D_PIN = 23;
+constexpr uint8_t EN_G_PIN = 4;
+constexpr uint8_t IN_1_D_PIN = 19;
+constexpr uint8_t IN_2_D_PIN = 18;
+constexpr uint8_t IN_1_G_PIN = 17;
+constexpr uint8_t IN_2_G_PIN = 16;
 
-// ============================================================
-//  WIFI ACCESS POINT
-//  L'ESP32 crée son propre réseau WiFi.
-//  Connecte-toi depuis ton téléphone/PC puis ouvre :
-//  http://192.168.4.1  dans le navigateur.
-// ============================================================
-#define WIFI_AP_SSID      "Drawbot"       // Nom du réseau WiFi visible
-#define WIFI_AP_PASSWORD  "drawbot123"    // Mot de passe (min 8 car.) — mettre "" pour réseau ouvert
-#define WIFI_AP_IP        "192.168.4.1"    // Adresse habituelle du point d acces ESP32
-#define WIFI_AP_CHANNEL   1               // Canal WiFi (1-13)
-#define HTTP_PORT         80              // Port du serveur web
+constexpr uint8_t ENC_G_CH_A_PIN = 32;
+constexpr uint8_t ENC_G_CH_B_PIN = 33;
+constexpr uint8_t ENC_D_CH_A_PIN = 27;
+constexpr uint8_t ENC_D_CH_B_PIN = 14;
 
-// ============================================================
-//  BOUTON BOOT & LED INTÉGRÉE
-//  Appui sur BOOT (GPIO0) : active / coupe le WiFi
-//  LED fixe     = WiFi actif   (robot accessible)
-//  LED clignotante = WiFi inactif
-// ============================================================
-#define WIFI_TOGGLE_PIN   0   // GPIO 0 = bouton BOOT (actif à LOW)
-#define WIFI_LED_PIN      2   // GPIO 2 = LED bleue intégrée
+constexpr uint8_t I2C_SDA_PIN = 21;
+constexpr uint8_t I2C_SCL_PIN = 22;
+constexpr uint8_t ADDR_IMU = 0x6B;
+constexpr uint8_t ADDR_MAG = 0x1E;
 
-// ============================================================
-//  BROCHES MOTEURS
-// ============================================================
-#define EN_G_PIN    4
-#define EN_D_PIN   23
-#define IN_1_G_PIN 17
-#define IN_2_G_PIN 16
-#define IN_1_D_PIN 19
-#define IN_2_D_PIN 18
+constexpr uint32_t SERIAL_BAUDRATE = 115200;
 
-// ============================================================
-//  ENCODEURS (quadrature)
-// ============================================================
-// Gauche
-#define ENC_G_CH_A 32
-#define ENC_G_CH_B 33
-// Droite
-#define ENC_D_CH_A 27
-#define ENC_D_CH_B 14
+constexpr char WIFI_AP_SSID[] = "Drawbot";
+constexpr char WIFI_AP_PASSWORD[] = "drawbot123";
 
-// Conversion mécanique : ticks par tour (A FIXER après test)
-// TODO: Fais tourner une roue ~1 tour mécanique puis relève les ticks
-// mesurés sur Serial (getEncG/getEncD).
-#ifndef ENC_TICKS_PER_REV
-#define ENC_TICKS_PER_REV 20
+// Securite commande.
+constexpr uint8_t PWM_MIN = 0;
+constexpr uint8_t PWM_MAX = 255;
+constexpr uint32_t MAX_COMMAND_DURATION_MS = 15000;
+constexpr uint32_t DEFAULT_MANUAL_DURATION_MS = 350;
 
-#endif
+// Calibration mecanique. A ajuster sur le robot reel.
+constexpr float WHEEL_DIAMETER_CM = 9.0f;
+constexpr float WHEEL_BASE_CM = 12.0f;       // Entraxe roues, a mesurer.
+constexpr float MOTOR_LEFT_CORRECTION = 1.00f;
+constexpr float MOTOR_RIGHT_CORRECTION = 1.00f;
 
+// Calibration open-loop par defaut.
+constexpr uint8_t DEFAULT_STRAIGHT_PWM = 170;
+constexpr uint8_t DEFAULT_TURN_PWM = 165;
+constexpr uint32_t DURATION_10CM_MS = 900;
+constexpr uint32_t DURATION_20CM_MS = 1800;
+constexpr uint32_t DURATION_40CM_MS = 3600;
+constexpr uint32_t DURATION_TURN_90_MS = 760;
 
-// ============================================================
-//  PWM
-// ============================================================
-#define PWM_FREQ          5000
-#define PWM_RESOLUTION    8
-#define PWM_MAX           255
-#define PWM_CHANNEL_L_IN1 0
-#define PWM_CHANNEL_L_IN2 1
-#define PWM_CHANNEL_R_IN1 2
-#define PWM_CHANNEL_R_IN2 3
+// Cercle open-loop. Le rayon est le rayon du centre du robot.
+constexpr float CIRCLE_MIN_RADIUS_CM = 2.0f;
+constexpr float CIRCLE_MAX_RADIUS_CM = 20.0f;
+constexpr uint8_t CIRCLE_OUTER_PWM = 170;
 
-// ============================================================
-//  CONSTANTES LOGIQUES
-// ============================================================
-#define LEFT_MOTOR  0
-#define RIGHT_MOTOR 1
-#define FORWARD     1
-#define BACKWARD   -1
-#define STOP        0
-#define TURN_LEFT  -1
-#define TURN_RIGHT  1
-
-// ============================================================
-//  PROFILS DE RÉGLAGES (sélectionnables depuis l'interface web)
-// ============================================================
-struct RobotProfile {
-  const char*   name;
-  int           pwm_straight;
-  int           pwm_turn;
-  float         left_correction;
-  float         right_correction;
-  float         inner_wheel_ratio;
-  unsigned long dur_20cm;
-  unsigned long dur_10cm;
-  unsigned long dur_40cm;
-  unsigned long dur_90deg;
+enum class SpeedProfile : uint8_t {
+  Slow = 0,
+  Normal = 1,
+  Fast = 2,
 };
 
-// Profil 0 — Lent / précis
-// Profil 1 — Normal (valeurs d'origine)
-// Profil 2 — Rapide
-static const RobotProfile PROFILES[] = {
-  { "Lent",   130, 140, 1.0f, 0.94f, 0.45f,  750, 375,  900, 1900 },
-  { "Normal", 190, 200, 1.0f, 0.94f, 0.45f,  550, 375,  600, 1450 },
-  { "Rapide", 230, 240, 1.0f, 0.94f, 0.40f,  400, 375,  450, 1100 },
+struct ProfileSettings {
+  const char* name;
+  uint8_t straightPwm;
+  uint8_t turnPwm;
+  float durationScale;
 };
 
-#define PROFILE_COUNT         3
-#define DEFAULT_PROFILE_INDEX 1   // 0=Lent, 1=Normal, 2=Rapide
+constexpr ProfileSettings SPEED_PROFILES[] = {
+  {"Lent", 120, 120, 1.35f},
+  {"Normal", DEFAULT_STRAIGHT_PWM, DEFAULT_TURN_PWM, 1.00f},
+  {"Rapide", 220, 215, 0.75f},
+};
 
-#endif // CONFIG_H
+constexpr uint8_t SPEED_PROFILE_COUNT = sizeof(SPEED_PROFILES) / sizeof(SPEED_PROFILES[0]);

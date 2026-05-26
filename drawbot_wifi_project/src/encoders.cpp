@@ -1,64 +1,57 @@
 #include "encoders.h"
+
 #include "config.h"
 
-#include <Arduino.h>
+namespace {
+volatile long leftTicks = 0;
+volatile long rightTicks = 0;
 
-// ============================================================
-//  Compteurs encodeurs (ticks)
-// ============================================================
-static volatile long encG = 0;
-static volatile long encD = 0;
-
-// ============================================================
-//  ISR — mode quadrature (2 voies)
-//  Convention de direction utilisée:
-//  - Pour chaque front CHANGE sur la voie A, on compare l'état de B.
-// ============================================================
-void IRAM_ATTR isrEncG_A() {
-  // Si CHA == CHB alors +1 sinon -1
-  encG += (digitalRead(ENC_G_CH_A) == digitalRead(ENC_G_CH_B)) ? 1 : -1;
+void IRAM_ATTR onLeftEncoderA() {
+  const bool a = digitalRead(ENC_G_CH_A_PIN);
+  const bool b = digitalRead(ENC_G_CH_B_PIN);
+  leftTicks += (a == b) ? 1 : -1;
 }
 
-void IRAM_ATTR isrEncD_A() {
-  // Si CDA == CDB alors +1 sinon -1
-  encD += (digitalRead(ENC_D_CH_A) == digitalRead(ENC_D_CH_B)) ? 1 : -1;
+void IRAM_ATTR onRightEncoderA() {
+  const bool a = digitalRead(ENC_D_CH_A_PIN);
+  const bool b = digitalRead(ENC_D_CH_B_PIN);
+  rightTicks += (a == b) ? 1 : -1;
 }
+}  // namespace
 
-// ============================================================
-//  API
-// ============================================================
 void setupEncoders() {
-  pinMode(ENC_G_CH_A, INPUT_PULLUP);
-  pinMode(ENC_G_CH_B, INPUT_PULLUP);
-  pinMode(ENC_D_CH_A, INPUT_PULLUP);
-  pinMode(ENC_D_CH_B, INPUT_PULLUP);
+  pinMode(ENC_G_CH_A_PIN, INPUT_PULLUP);
+  pinMode(ENC_G_CH_B_PIN, INPUT_PULLUP);
+  pinMode(ENC_D_CH_A_PIN, INPUT_PULLUP);
+  pinMode(ENC_D_CH_B_PIN, INPUT_PULLUP);
 
-  encG = 0;
-  encD = 0;
-
-  // Attacher sur la voie A (moins d'ISR, direction via la voie B)
-  attachInterrupt(digitalPinToInterrupt(ENC_G_CH_A), isrEncG_A, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENC_D_CH_A), isrEncD_A, CHANGE);
-}
-
-long getEncG() {
-  noInterrupts();
-  long v = encG;
-  interrupts();
-  return v;
-}
-
-long getEncD() {
-  noInterrupts();
-  long v = encD;
-  interrupts();
-  return v;
+  attachInterrupt(digitalPinToInterrupt(ENC_G_CH_A_PIN), onLeftEncoderA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_D_CH_A_PIN), onRightEncoderA, CHANGE);
+  resetEncoders();
+  Serial.println("[ENCODERS] Encodeurs initialises sur CH_A gauche/droit");
 }
 
 void resetEncoders() {
   noInterrupts();
-  encG = 0;
-  encD = 0;
+  leftTicks = 0;
+  rightTicks = 0;
   interrupts();
 }
 
+long getLeftEncoderTicks() {
+  noInterrupts();
+  const long value = leftTicks;
+  interrupts();
+  return value;
+}
+
+long getRightEncoderTicks() {
+  noInterrupts();
+  const long value = rightTicks;
+  interrupts();
+  return value;
+}
+
+bool encodersAvailable() {
+  return true;
+}

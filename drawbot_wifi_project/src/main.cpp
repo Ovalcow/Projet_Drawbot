@@ -1,24 +1,38 @@
 #include <Arduino.h>
+
 #include "config.h"
+#include "encoders.h"
 #include "motors.h"
+#include "sensors.h"
+#include "sequences.h"
 #include "wifi_server.h"
 
 void setup() {
-#if DEBUG_ENABLED
-  Serial.begin(115200);
-  unsigned long t = millis();
-  while (!Serial && millis() - t < 2000);
-  DBG("\n=== Drawbot WiFi boot ===");
-#endif
+  Serial.begin(SERIAL_BAUDRATE);
+  delay(200);
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("[BOOT] Drawbot ESP32 - demarrage");
+  Serial.println("[BOOT] Baudrate 115200");
+
+  pinMode(LEDU1_PIN, OUTPUT);
+  pinMode(LEDU2_PIN, OUTPUT);
+  digitalWrite(LEDU1_PIN, LOW);
+  digitalWrite(LEDU2_PIN, LOW);
 
   setupMotors();
-  stopMotors();
-  setupWifi();
+  setupEncoders();
+  setupSensors();
+  setupSequences();
+  setupWifiServer();
 
-  DBG("[Main] Setup OK. Appuyer sur BOOT pour activer le WiFi.");
-  DBG("[Main] Reseau : " WIFI_AP_SSID "  |  http://" WIFI_AP_IP);
+  digitalWrite(LEDU1_PIN, HIGH);
+  Serial.println("[BOOT] Pret");
+  Serial.println("========================================");
 }
 
 void loop() {
-  loopWifi();
+  handleWifiServer();
+  updateSequences();
+  updateMotors();
 }

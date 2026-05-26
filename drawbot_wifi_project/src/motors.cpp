@@ -1,174 +1,222 @@
 #include "motors.h"
 
-extern RobotProfile activeProfile;
+#include "config.h"
 
-// -------------------------------------------------------
+namespace {
+struct TimedMotion {
+  bool active = false;
+  MotionKind kind = MotionKind::Stopped;
+  uint32_t startedAtMs = 0;
+  uint32_t durationMs = 0;
+  int leftPower = 0;
+  int rightPower = 0;
+};
+
+TimedMotion motion;
+
+int applyCorrection(bool leftMotor, int power) {
+  const float correction = leftMotor ? MOTOR_LEFT_CORRECTION : MOTOR_RIGHT_CORRECTION;
+  const int corrected = static_cast<int>(roundf(static_cast<float>(power) * correction));
+  return constrain(corrected, -static_cast<int>(PWM_MAX), static_cast<int>(PWM_MAX));
+}
+
+void writeMotorPins(uint8_t in1Pin, uint8_t in2Pin, int power) {
+  const int pwm = abs(constrain(power, -static_cast<int>(PWM_MAX), static_cast<int>(PWM_MAX)));
+  if (power > 0) {
+    analogWrite(in1Pin, pwm);
+    analogWrite(in2Pin, 0);
+  } else if (power < 0) {
+    analogWrite(in1Pin, 0);
+    analogWrite(in2Pin, pwm);
+  } else {
+    analogWrite(in1Pin, 0);
+    analogWrite(in2Pin, 0);
+  }
+}
+
+void startTimedMotion(MotionKind kind, int leftPower, int rightPower, uint32_t durationMs) {
+  const uint32_t boundedDuration = clampDuration(durationMs);
+  setMotors(leftPower, rightPower);
+  motion.active = boundedDuration > 0;
+  motion.kind = motion.active ? kind : MotionKind::Stopped;
+  motion.startedAtMs = millis();
+  motion.durationMs = boundedDuration;
+  motion.leftPower = leftPower;
+  motion.rightPower = rightPower;
+
+  Serial.printf("[MOTORS] Mouvement=%s PWM_G=%d PWM_D=%d duree=%lu ms\n",
+                motionKindToString(kind), leftPower, rightPower,
+                static_cast<unsigned long>(boundedDuration));
+
+  if (!motion.active) {
+    stopMotors();
+  }
+}
+}  // namespace
+
 void setupMotors() {
-  ledcSetup(PWM_CHANNEL_L_IN1, PWM_FREQ, PWM_RESOLUTION);
-  ledcSetup(PWM_CHANNEL_L_IN2, PWM_FREQ, PWM_RESOLUTION);
-  ledcSetup(PWM_CHANNEL_R_IN1, PWM_FREQ, PWM_RESOLUTION);
-  ledcSetup(PWM_CHANNEL_R_IN2, PWM_FREQ, PWM_RESOLUTION);
+  pinMode(EN_D_PIN, OUTPUT);
+  pinMode(EN_G_PIN, OUTPUT);
+  pinMode(IN_1_D_PIN, OUTPUT);
+  pinMode(IN_2_D_PIN, OUTPUT);
+  pinMode(IN_1_G_PIN, OUTPUT);
+  pinMode(IN_2_G_PIN, OUTPUT);
 
-  ledcAttachPin(IN_1_G_PIN, PWM_CHANNEL_L_IN1);
-  ledcAttachPin(IN_2_G_PIN, PWM_CHANNEL_L_IN2);
-  ledcAttachPin(IN_1_D_PIN, PWM_CHANNEL_R_IN1);
-  ledcAttachPin(IN_2_D_PIN, PWM_CHANNEL_R_IN2);
-
-  pinMode(EN_G_PIN, OUTPUT);  digitalWrite(EN_G_PIN, HIGH);
-  pinMode(EN_D_PIN, OUTPUT);  digitalWrite(EN_D_PIN, HIGH);
-
-  DBG("[Motors] Initialisés.");
+  digitalWrite(EN_D_PIN, HIGH);
+  digitalWrite(EN_G_PIN, HIGH);
+  stopMotors();
+  Serial.println("[MOTORS] Initialisation terminee, moteurs arretes");
 }
 
-// -------------------------------------------------------
-void setMotorPower(int motor_id, int direction, int pwm_value) {
-  pwm_value = constrain(pwm_value, 0, PWM_MAX);
-
-  float factor = (motor_id == LEFT_MOTOR)
-    ? activeProfile.left_correction
-    : activeProfile.right_correction;
-
-  int pwm = constrain((int)(pwm_value * factor), 0, PWM_MAX);
-
-  if (motor_id == LEFT_MOTOR) {
-    digitalWrite(EN_G_PIN, HIGH);
-    if      (direction == FORWARD)  { ledcWrite(PWM_CHANNEL_L_IN1, pwm); ledcWrite(PWM_CHANNEL_L_IN2, 0);   }
-    else if (direction == BACKWARD) { ledcWrite(PWM_CHANNEL_L_IN1, 0);   ledcWrite(PWM_CHANNEL_L_IN2, pwm); }
-    else                            { ledcWrite(PWM_CHANNEL_L_IN1, 0);   ledcWrite(PWM_CHANNEL_L_IN2, 0);   }
-
-  } else {
-    digitalWrite(EN_D_PIN, HIGH);
-    // Convention unifiée : FORWARD=IN1 actif, BACKWARD=IN2 actif
-    if      (direction == FORWARD)  { ledcWrite(PWM_CHANNEL_R_IN1, pwm); ledcWrite(PWM_CHANNEL_R_IN2, 0);   }
-    else if (direction == BACKWARD) { ledcWrite(PWM_CHANNEL_R_IN1, 0);   ledcWrite(PWM_CHANNEL_R_IN2, pwm); }
-    else                            { ledcWrite(PWM_CHANNEL_R_IN1, 0);   ledcWrite(PWM_CHANNEL_R_IN2, 0);   }
+void updateMotors() {
+  if (!motion.active) {
+    return;
   }
 
+  const uint32_t elapsed = millis() - motion.startedAtMs;
+  if (elapsed >= motion.durationMs) {
+    Serial.printf("[MOTORS] Fin mouvement=%s apres %lu ms\n",
+                  motionKindToString(motion.kind),
+                  static_cast<unsigned long>(elapsed));
+    stopMotors();
+  }
 }
 
-// -------------------------------------------------------
+void setMotorPower(bool leftMotor, int power) {
+  const int correctedPower = applyCorrection(leftMotor, power);
+  if (leftMotor) {
+    writeMotorPins(IN_1_G_PIN, IN_2_G_PIN, correctedPower);
+  } else {
+    writeMotorPins(IN_1_D_PIN, IN_2_D_PIN, correctedPower);
+  }
+}
+
+void setMotors(int leftPower, int rightPower) {
+  const int boundedLeft = constrain(leftPower, -static_cast<int>(PWM_MAX), static_cast<int>(PWM_MAX));
+  const int boundedRight = constrain(rightPower, -static_cast<int>(PWM_MAX), static_cast<int>(PWM_MAX));
+  setMotorPower(true, boundedLeft);
+  setMotorPower(false, boundedRight);
+  motion.leftPower = boundedLeft;
+  motion.rightPower = boundedRight;
+}
+
+void setMotors(int leftPower, int rightPower, uint32_t durationMs) {
+  startTimedMotion(MotionKind::Custom, leftPower, rightPower, durationMs);
+}
+
 void stopMotors() {
-  setMotorPower(LEFT_MOTOR,  STOP, 0);
-  setMotorPower(RIGHT_MOTOR, STOP, 0);
-  DBG("[Motors] Stop.");
+  analogWrite(IN_1_D_PIN, 0);
+  analogWrite(IN_2_D_PIN, 0);
+  analogWrite(IN_1_G_PIN, 0);
+  analogWrite(IN_2_G_PIN, 0);
+  motion.active = false;
+  motion.kind = MotionKind::Stopped;
+  motion.durationMs = 0;
+  motion.leftPower = 0;
+  motion.rightPower = 0;
 }
 
-// -------------------------------------------------------
-void moveRobotStraight(int direction, int base_pwm, unsigned long duration_ms) {
-  DBG2("[Motors] Ligne droite | dir=", direction == FORWARD ? "AV" : "AR");
-  setMotorPower(LEFT_MOTOR,  direction, base_pwm);
-  setMotorPower(RIGHT_MOTOR, direction, base_pwm);
-  delay(duration_ms);
+void moveRobotStraight(int pwm, uint32_t durationMs, bool forward) {
+  const int boundedPwm = clampPwm(pwm);
+  const int signedPwm = forward ? boundedPwm : -boundedPwm;
+  startTimedMotion(forward ? MotionKind::Forward : MotionKind::Backward,
+                   signedPwm, signedPwm, durationMs);
+}
+
+void turnRobot(bool left, int pwm, uint32_t durationMs) {
+  const int boundedPwm = clampPwm(pwm);
+  const int leftPower = left ? -boundedPwm : boundedPwm;
+  const int rightPower = left ? boundedPwm : -boundedPwm;
+  startTimedMotion(left ? MotionKind::TurnLeft : MotionKind::TurnRight,
+                   leftPower, rightPower, durationMs);
+}
+
+void testMotors() {
+  Serial.println("[DIAG] TEST_MOTORS bloquant");
+  setMotors(160, 0);
+  delay(1000);
+  stopMotors();
+  delay(250);
+  setMotors(0, 160);
+  delay(1000);
+  stopMotors();
+  delay(250);
+  setMotors(160, 160);
+  delay(1000);
   stopMotors();
 }
 
-// -------------------------------------------------------
-void turnRobot(int turn_direction, int base_pwm, unsigned long duration_ms) {
-  int pwm_outer = base_pwm;
-  int pwm_inner = constrain(
-    (int)(base_pwm * activeProfile.inner_wheel_ratio), 0, PWM_MAX
-  );
-
-  DBG2("[Motors] Arc | ratio=", activeProfile.inner_wheel_ratio);
-
-  if (turn_direction == TURN_LEFT) {
-    // Gauche : roue droite = extérieure (rapide), gauche = intérieure (lente)
-    setMotorPower(RIGHT_MOTOR, FORWARD, pwm_outer);
-    setMotorPower(LEFT_MOTOR,  FORWARD, pwm_inner);
-  } else {
-    // Droite : roue gauche = extérieure (rapide), droite = intérieure (lente)
-    setMotorPower(LEFT_MOTOR,  FORWARD, pwm_outer);
-    setMotorPower(RIGHT_MOTOR, FORWARD, pwm_inner);
+void testPWM() {
+  Serial.println("[DIAG] TEST_PWM bloquant");
+  const int values[] = {120, 180, 230};
+  for (const int pwm : values) {
+    Serial.printf("[DIAG] PWM=%d\n", pwm);
+    setMotors(pwm, pwm);
+    delay(900);
+    stopMotors();
+    delay(250);
   }
-  delay(duration_ms);
+}
+
+void testDirections() {
+  Serial.println("[DIAG] TEST_DIR bloquant");
+  moveRobotStraight(160, 700, true);
+  delay(850);
+  moveRobotStraight(160, 700, false);
+  delay(850);
+  turnRobot(true, 160, 700);
+  delay(850);
+  turnRobot(false, 160, 700);
+  delay(850);
   stopMotors();
 }
 
-// -------------------------------------------------------
-void turnRobotPivot(int turn_direction, int base_pwm, unsigned long duration_ms) {
-  // Pivot sur place : une roue avant, l'autre arrière
-  // Convention : TURN_LEFT => robot pivote vers la gauche
-  if (turn_direction == TURN_LEFT) {
-    setMotorPower(LEFT_MOTOR,  FORWARD,  base_pwm);
-    setMotorPower(RIGHT_MOTOR, BACKWARD, base_pwm);
-  } else {
-    setMotorPower(LEFT_MOTOR,  BACKWARD, base_pwm);
-    setMotorPower(RIGHT_MOTOR, FORWARD,  base_pwm);
+bool isMotionActive() {
+  return motion.active;
+}
+
+MotionKind currentMotionKind() {
+  return motion.kind;
+}
+
+uint32_t currentMotionRemainingMs() {
+  if (!motion.active) {
+    return 0;
   }
-
-  delay(duration_ms);
-  stopMotors();
+  const uint32_t elapsed = millis() - motion.startedAtMs;
+  return elapsed >= motion.durationMs ? 0 : motion.durationMs - elapsed;
 }
 
-// ============================================================
-//  Phase 2.1 — Boucle ouverte en ticks (sans PID)
-// ============================================================
-// NOTE: les conversions cm/deg -> ticks sont volontairement des placeholders
-// pour valider le pipeline (encodeurs -> boucles -> arrêt). À ajuster lors
-// du calibrage mécanique.
-
-static inline long cmToTicks(float dist_cm) {
-  // Placeholder : 1 cm => 1 tick
-  return (long)llround(dist_cm);
+int currentLeftPower() {
+  return motion.leftPower;
 }
 
-static inline long degToTicks(float deg) {
-  // Placeholder : 1 deg => 1 tick
-  return (long)llround(deg);
+int currentRightPower() {
+  return motion.rightPower;
 }
 
-static void driveTicks(long ticksG, long ticksD, int base_pwm) {
-  long startG = getEncG();
-  long startD = getEncD();
-
-  long remG = llabs(ticksG);
-  long remD = llabs(ticksD);
-
-  int dirG = (ticksG >= 0) ? FORWARD : BACKWARD;
-  int dirD = (ticksD >= 0) ? FORWARD : BACKWARD;
-
-  setMotorPower(LEFT_MOTOR, dirG, base_pwm);
-  setMotorPower(RIGHT_MOTOR, dirD, base_pwm);
-
-  // Stop dès que les deux roues ont atteint au moins leurs cibles
-  unsigned long startMs = millis();
-  const unsigned long timeoutMs = 15000; // sécurité
-
-  while (true) {
-    long curG = getEncG() - startG;
-    long curD = getEncD() - startD;
-
-    bool okG = llabs(curG) >= remG;
-    bool okD = llabs(curD) >= remD;
-
-    if (okG && okD) break;
-    if (millis() - startMs > timeoutMs) break;
-    delay(5);
-  }
-
-  stopMotors();
-}
-
-void moveDistance_cm(float dist_cm) {
-  int base_pwm = activeProfile.pwm_straight;
-  long ticks = cmToTicks(dist_cm);
-  DBG2("[MOVE] dist_cm=", dist_cm);
-  driveTicks(ticks, ticks, base_pwm);
-}
-
-void rotateDeg(float deg) {
-  int base_pwm = activeProfile.pwm_turn;
-  long ticks = degToTicks(deg);
-  DBG2("[ROT] deg=", deg);
-
-  // Convention: rotation positive = TURN_RIGHT (pivot sur place)
-  if (ticks >= 0) {
-    // gauche avant, droite arrière
-    driveTicks(+ticks, -ticks, base_pwm);
-  } else {
-    // gauche arrière, droite avant
-    driveTicks(ticks, -ticks, base_pwm);
+const char* motionKindToString(MotionKind kind) {
+  switch (kind) {
+    case MotionKind::Forward:
+      return "FORWARD";
+    case MotionKind::Backward:
+      return "BACKWARD";
+    case MotionKind::TurnLeft:
+      return "TURN_LEFT";
+    case MotionKind::TurnRight:
+      return "TURN_RIGHT";
+    case MotionKind::Custom:
+      return "CUSTOM";
+    case MotionKind::Stopped:
+    default:
+      return "STOPPED";
   }
 }
 
+int clampPwm(int pwm) {
+  return constrain(pwm, static_cast<int>(PWM_MIN), static_cast<int>(PWM_MAX));
+}
 
+uint32_t clampDuration(uint32_t durationMs) {
+  return min(durationMs, MAX_COMMAND_DURATION_MS);
+}

@@ -1,13 +1,29 @@
-#ifndef SEQUENCES_H
-#define SEQUENCES_H
+#pragma once
 
-// Séquence escalier (5 étapes : avance, tourne G, avance, tourne D, avance)
-void sequenceEscalier();
+#include <Arduino.h>
 
-// Séquence carré : 4 × (avance 20cm + tourne 90° droite)
-void sequenceCarre();
+enum class SequenceKind : uint8_t {
+  None,
+  Escalier,
+  Circle,
+  Rose,
+  TestMotors,
+  TestPWM,
+  TestDirections,
+};
 
-// Séquence zigzag : alterne gauche/droite 3 fois
-void sequenceZigzag();
+void setupSequences();
+void updateSequences();
+void stopSequences();
 
-#endif // SEQUENCES_H
+bool startSequenceEscalier();
+bool startSequenceCircle(float radiusCm);
+bool startSequenceRose();
+bool startDiagnosticMotors();
+bool startDiagnosticPWM();
+bool startDiagnosticDirections();
+
+bool isSequenceActive();
+SequenceKind currentSequenceKind();
+const char* sequenceKindToString(SequenceKind kind);
+String sequenceStatusText();
