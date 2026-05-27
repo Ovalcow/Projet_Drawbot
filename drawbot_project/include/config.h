@@ -40,6 +40,16 @@ constexpr float WHEEL_BASE_CM = 12.0f;       // Entraxe roues, a mesurer.
 constexpr float MOTOR_LEFT_CORRECTION = 1.00f;
 constexpr float MOTOR_RIGHT_CORRECTION = 1.00f;
 
+// Corrections de sens moteur (signe). A mettre a true si le moteur est inverse cote cablage.
+// Par defaut on considere que +PWM correspond a "avant" pour chaque moteur.
+constexpr bool INVERT_LEFT_MOTOR = true;
+constexpr bool INVERT_RIGHT_MOTOR = true;
+
+// Permet de swapper gauche/droite si les moteurs (canaux) sont connectes en echange.
+// Mets a true si, par exemple, "PWM gauche" fait tourner le robot a la place comme si c'etait la droite.
+constexpr bool SWAP_LEFT_RIGHT_MOTORS = true;
+
+
 // Calibration open-loop par defaut.
 constexpr uint8_t DEFAULT_STRAIGHT_PWM = 170;
 constexpr uint8_t DEFAULT_TURN_PWM = 165;

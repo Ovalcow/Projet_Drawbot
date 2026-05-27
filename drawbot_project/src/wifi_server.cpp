@@ -177,6 +177,8 @@ void handleCommand() {
   String command = server.arg("c");
   command.trim();
   command.toUpperCase();
+
+
   Serial.printf("[HTTP] Commande recue: %s\n", command.c_str());
 
   const String verb = getToken(command, 0);

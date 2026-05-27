@@ -16,9 +16,13 @@ TimedMotion motion;
 
 int applyCorrection(bool leftMotor, int power) {
   const float correction = leftMotor ? MOTOR_LEFT_CORRECTION : MOTOR_RIGHT_CORRECTION;
-  const int corrected = static_cast<int>(roundf(static_cast<float>(power) * correction));
+  const bool invert = leftMotor ? INVERT_LEFT_MOTOR : INVERT_RIGHT_MOTOR;
+
+  const int signedPower = invert ? -power : power;
+  const int corrected = static_cast<int>(roundf(static_cast<float>(signedPower) * correction));
   return constrain(corrected, -static_cast<int>(PWM_MAX), static_cast<int>(PWM_MAX));
 }
+
 
 void writeMotorPins(uint8_t in1Pin, uint8_t in2Pin, int power) {
   const int pwm = abs(constrain(power, -static_cast<int>(PWM_MAX), static_cast<int>(PWM_MAX)));
@@ -125,10 +129,11 @@ void moveRobotStraight(int pwm, uint32_t durationMs, bool forward) {
 
 void turnRobot(bool left, int pwm, uint32_t durationMs) {
   const int boundedPwm = clampPwm(pwm);
-  const int leftPower = left ? -boundedPwm : boundedPwm;
-  const int rightPower = left ? boundedPwm : -boundedPwm;
+  const int leftPower = left ? boundedPwm : -boundedPwm;
+  const int rightPower = left ? -boundedPwm : boundedPwm;
   startTimedMotion(left ? MotionKind::TurnLeft : MotionKind::TurnRight,
                    leftPower, rightPower, durationMs);
+
 }
 
 void testMotors() {
